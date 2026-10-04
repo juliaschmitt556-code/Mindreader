@@ -1,0 +1,1003 @@
+You are the lead product engineer, UI engineer, backend engineer, AI engineer, DevOps engineer, QA engineer and technical project manager for this project.
+
+I want you to BUILD THE ENTIRE APPLICATION, not just give me instructions.
+
+PROJECT NAME:
+ReplyMind
+
+PRODUCT:
+A mobile-first AI PWA that allows a user to upload a screenshot of a conversation, paste conversation text, or provide a message, and receive context-aware suggested replies.
+
+The core experience should feel like:
+
+UPLOAD SCREENSHOT
+        ↓
+AI reads conversation
+        ↓
+Understands context + tone + relationship
+        ↓
+Generates multiple natural replies
+        ↓
+User chooses tone/style
+        ↓
+User copies or regenerates reply
+
+The product must be polished enough to deploy publicly.
+
+==================================================
+IMPORTANT AUTONOMOUS BUILD RULES
+==================================================
+
+1. DO NOT stop after creating a prototype.
+
+2. DO NOT only create frontend screens.
+
+3. Build:
+   - frontend
+   - backend
+   - database
+   - authentication
+   - AI integration
+   - image upload/processing
+   - conversation storage
+   - API routes
+   - PWA
+   - responsive mobile UI
+   - error handling
+   - loading states
+   - security
+   - tests
+   - deployment configuration
+   - documentation
+
+4. If something is unspecified, make a sensible production-quality decision and continue.
+
+5. Do NOT repeatedly ask me to approve obvious implementation decisions.
+
+6. Work autonomously.
+
+7. Before making large architectural changes, inspect the existing project.
+
+8. Never overwrite working functionality unnecessarily.
+
+9. Keep the project buildable after every milestone.
+
+10. After every major milestone:
+    - run lint
+    - run type checking
+    - run tests
+    - run production build
+    - fix errors
+    - commit changes to Git
+
+11. NEVER leave the repository in a broken state.
+
+12. Create a persistent file:
+    /BUILD_STATE.md
+
+This file must contain:
+    - current milestone
+    - completed features
+    - remaining features
+    - known bugs
+    - next exact task
+    - environment variables required
+    - deployment status
+    - latest successful build
+    - latest Git commit
+
+If your session is interrupted, the next session MUST read BUILD_STATE.md first and continue from exactly where the previous session stopped.
+
+==================================================
+DESIGN INPUT
+==================================================
+
+I will provide designs/assets from Figma and Canva.
+
+Use the supplied designs as the visual source of truth.
+
+Do not blindly copy dimensions if they create bad responsive behavior.
+
+Extract:
+- colors
+- typography
+- spacing
+- cards
+- buttons
+- icons
+- navigation
+- component hierarchy
+- shadows
+- border radius
+- animations
+- empty states
+- loading states
+
+Create a reusable design system from the supplied designs.
+
+If Figma/Canva assets are unavailable at build time:
+create a high-quality equivalent UI and structure the code so supplied assets can be dropped in later without rewriting the application.
+
+==================================================
+TECH STACK
+==================================================
+
+Use:
+
+Frontend:
+- Next.js
+- TypeScript
+- React
+- Tailwind CSS
+- shadcn/ui where appropriate
+- PWA support
+- responsive mobile-first architecture
+
+Backend:
+- Next.js server/API routes or a clean backend layer
+- TypeScript
+- secure server-side AI calls
+
+Database:
+- PostgreSQL
+- Prisma ORM
+
+Authentication:
+- email/password
+- OAuth-ready architecture
+- secure sessions
+
+Storage:
+Use an object storage provider for uploaded screenshots.
+
+AI:
+Use the xAI API.
+
+Primary AI model:
+grok-4.7
+
+The application must send screenshots as image inputs to the AI.
+
+Never expose XAI_API_KEY in client-side code.
+
+==================================================
+ENVIRONMENT VARIABLES
+==================================================
+
+Create:
+
+.env.example
+
+with:
+
+XAI_API_KEY=
+DATABASE_URL=
+AUTH_SECRET=
+STORAGE_ENDPOINT=
+STORAGE_ACCESS_KEY=
+STORAGE_SECRET_KEY=
+STORAGE_BUCKET=
+NEXT_PUBLIC_APP_URL=
+
+Do NOT hardcode secrets.
+
+Do NOT commit .env files.
+
+==================================================
+CORE FEATURES
+==================================================
+
+FEATURE 1 — LANDING PAGE
+
+Create a polished landing page containing:
+
+Hero:
+
+"Know exactly what to say."
+
+Subheading:
+
+"Upload a conversation, understand the moment, and get a reply that actually sounds like you."
+
+Primary CTA:
+
+"Try it free"
+
+Secondary CTA:
+
+"See how it works"
+
+Sections:
+
+- Screenshot → AI → Reply explanation
+- Example conversation
+- Reply styles
+- Features
+- Privacy section
+- FAQ
+- CTA
+- Footer
+
+==================================================
+FEATURE 2 — AUTHENTICATION
+==================================================
+
+Implement:
+
+- Sign up
+- Login
+- Logout
+- Forgot password
+- Session persistence
+- Protected dashboard
+
+==================================================
+FEATURE 3 — DASHBOARD
+==================================================
+
+Mobile-first dashboard.
+
+Header:
+- logo
+- profile
+- settings
+
+Main:
+"What's the situation?"
+
+Input options:
+
+[ Upload Screenshot ]
+
+[ Paste Conversation ]
+
+[ Type Message ]
+
+Recent conversations below.
+
+==================================================
+FEATURE 4 — SCREENSHOT ANALYSIS
+==================================================
+
+Allow:
+
+- JPG
+- JPEG
+- PNG
+- HEIC if practical
+- drag/drop on desktop
+- mobile camera/gallery upload
+
+Show image preview.
+
+Allow user to crop/review before submitting if practical.
+
+Compress oversized images before upload when appropriate.
+
+Display:
+
+"Reading conversation..."
+
+Then:
+
+"Understanding the context..."
+
+Then:
+
+"Writing replies..."
+
+Do not expose internal chain-of-thought.
+
+==================================================
+FEATURE 5 — AI CONVERSATION UNDERSTANDING
+==================================================
+
+The AI must analyze the supplied conversation and internally determine:
+
+- who is speaking
+- message order
+- apparent relationship
+- emotional tone
+- important context
+- what the latest message means
+- what the other person may be feeling
+- what the user appears to want to communicate
+
+DO NOT expose hidden chain-of-thought.
+
+Instead return a short user-facing summary such as:
+
+"She seems frustrated and may feel like things are becoming complicated."
+
+==================================================
+FEATURE 6 — REPLY GENERATION
+==================================================
+
+Generate multiple reply options.
+
+Default:
+
+1. Natural
+2. Warm
+3. Romantic
+4. Short
+5. Reassuring
+
+Each reply should:
+
+- directly address the latest message
+- preserve context
+- sound human
+- avoid unnecessary formality
+- avoid repeating the entire conversation
+- avoid robotic language
+- match the selected tone
+
+Example:
+
+NATURAL
+
+"I understand what you mean. I don't want this to feel complicated either. I just want us to take things one step at a time."
+
+ROMANTIC
+
+"My love, I don't want anything complicated between us. I just want us to enjoy our time together and be happy."
+
+SHORT
+
+"I understand, my love. Let's just take it one step at a time. ❤️"
+
+==================================================
+FEATURE 7 — CUSTOM INSTRUCTION
+==================================================
+
+Add:
+
+"What do you want to say?"
+
+Example:
+
+"I want her to know I'm not angry."
+
+Then combine:
+
+conversation screenshot
++
+user instruction
++
+selected tone
+
+to generate the response.
+
+==================================================
+FEATURE 8 — TONE CONTROLS
+==================================================
+
+Create selectable styles:
+
+❤️ Romantic
+🥺 Reassuring
+😊 Sweet
+😌 Calm
+🔥 Flirty
+😂 Playful
+💬 Natural
+🙏 Apologetic
+💪 Confident
+✂️ Very short
+
+Also allow:
+
+"Make it shorter"
+
+"Make it softer"
+
+"Make it more romantic"
+
+"Make it sound natural"
+
+"Remove emojis"
+
+"Add emojis"
+
+==================================================
+FEATURE 9 — REGENERATE
+==================================================
+
+Every generated response should have:
+
+Copy
+Regenerate
+Shorten
+Rewrite
+
+Do not regenerate all responses unnecessarily.
+
+==================================================
+FEATURE 10 — CONVERSATION MEMORY
+==================================================
+
+Users can save conversations.
+
+Database entities should include approximately:
+
+User
+Conversation
+ConversationMessage
+Screenshot
+AIResponse
+ReplyVariant
+UserPreference
+
+A conversation should preserve relevant context so the user can return later.
+
+Allow:
+
+New conversation
+Rename
+Delete
+Archive
+Continue conversation
+
+==================================================
+FEATURE 11 — PRIVACY
+==================================================
+
+Screenshots may contain private conversations.
+
+Implement strong privacy defaults.
+
+Requirements:
+
+- authenticated access
+- private user storage
+- signed/private image URLs
+- server-side AI API calls
+- no API keys in frontend
+- input validation
+- file size limits
+- MIME validation
+- rate limiting
+- secure database queries
+- authorization checks on every private resource
+
+Add a privacy setting:
+
+"Delete conversation"
+
+and:
+
+"Delete uploaded screenshot"
+
+Do not retain images longer than necessary unless the user explicitly chooses to save them.
+
+==================================================
+FEATURE 12 — PWA
+==================================================
+
+Make the application installable.
+
+Implement:
+
+- manifest
+- icons
+- splash/theme configuration
+- service worker
+- offline shell
+- install prompt
+- responsive viewport
+- mobile navigation
+- iOS-friendly behavior
+
+The app should feel like a native mobile application.
+
+==================================================
+FEATURE 13 — MOBILE UX
+==================================================
+
+Prioritize:
+
+iPhone
+Android
+
+Use:
+
+- bottom navigation where appropriate
+- large touch targets
+- sticky composer
+- bottom sheets
+- mobile-friendly image upload
+- smooth transitions
+- keyboard-safe layouts
+
+Do not build a desktop website that merely shrinks on mobile.
+
+Build mobile-first.
+
+==================================================
+FEATURE 14 — RESPONSE UI
+==================================================
+
+Each AI response card should look polished.
+
+Example:
+
+────────────────────────
+
+❤️ Romantic
+
+"My love, I understand what you're saying..."
+
+[Copy] [Rewrite]
+
+────────────────────────
+
+😌 Calm
+
+"I understand where you're coming from..."
+
+[Copy] [Rewrite]
+
+Add subtle success feedback:
+
+✓ Copied
+
+==================================================
+FEATURE 15 — SETTINGS
+==================================================
+
+Include:
+
+Profile
+Appearance
+Default tone
+Emoji preference
+Saved conversations
+Privacy
+Delete account
+About
+
+==================================================
+FEATURE 16 — USAGE LIMITS
+==================================================
+
+Architect usage tracking so the product can eventually support:
+
+Free plan
+Premium plan
+
+Track:
+
+AI generations
+image analyses
+storage
+monthly usage
+
+Do not hardcode limits into the frontend.
+
+Backend must enforce limits.
+
+Create a service such as:
+
+UsageService
+
+so limits can be changed centrally.
+
+==================================================
+FEATURE 17 — ERROR HANDLING
+==================================================
+
+Handle:
+
+- invalid image
+- oversized image
+- unsupported format
+- AI timeout
+- AI unavailable
+- rate limit
+- authentication failure
+- database failure
+- storage failure
+- network failure
+
+Use friendly messages.
+
+Never show raw stack traces to users.
+
+==================================================
+FEATURE 18 — ACCESSIBILITY
+==================================================
+
+Implement:
+
+- keyboard navigation
+- semantic HTML
+- labels
+- accessible buttons
+- focus states
+- sufficient contrast
+- screen-reader-friendly controls
+
+==================================================
+FEATURE 19 — PERFORMANCE
+==================================================
+
+Optimize:
+
+- images
+- lazy loading
+- API requests
+- database queries
+- caching where appropriate
+- bundle size
+
+Do not send unnecessarily large screenshots to the AI.
+
+==================================================
+AI ARCHITECTURE
+==================================================
+
+Create a dedicated AI service:
+
+/lib/ai/
+
+Example:
+
+conversation-analyzer.ts
+reply-generator.ts
+prompts.ts
+ai-client.ts
+
+Keep AI provider code isolated.
+
+Do not scatter xAI API calls throughout React components.
+
+Use structured JSON output wherever practical.
+
+Example internal response:
+
+{
+  "summary": "...",
+  "tone": "frustrated",
+  "intent": "...",
+  "suggestions": [
+    {
+      "style": "romantic",
+      "text": "..."
+    },
+    {
+      "style": "natural",
+      "text": "..."
+    }
+  ]
+}
+
+Validate AI output before returning it to the client.
+
+==================================================
+PROMPT ENGINE
+==================================================
+
+Create reusable system prompts.
+
+The AI should behave as a communication assistant.
+
+It should:
+
+- understand conversation context
+- prioritize the latest message
+- avoid inventing facts
+- avoid pretending to know the people personally
+- preserve the user's intended meaning
+- produce natural language
+- adapt to relationship context
+- avoid excessive explanation
+- follow requested length
+- follow requested tone
+
+If the screenshot is unclear, ask for clarification rather than hallucinating.
+
+==================================================
+SECURITY
+==================================================
+
+Implement:
+
+- authentication middleware
+- authorization checks
+- rate limiting
+- CSRF protection where applicable
+- secure cookies
+- server-side secrets
+- upload validation
+- database parameterization through Prisma
+- abuse protection
+- request size limits
+
+Never trust client-provided user IDs.
+
+==================================================
+DATABASE
+==================================================
+
+Create Prisma schema.
+
+Suggested structure:
+
+User
+
+Conversation
+
+ConversationMessage
+
+UploadedImage
+
+AIAnalysis
+
+ReplySuggestion
+
+UsageRecord
+
+UserPreference
+
+Each private object must be owned by a user.
+
+==================================================
+API
+==================================================
+
+Create clean API endpoints.
+
+Examples:
+
+POST /api/analyze
+POST /api/reply
+POST /api/rewrite
+POST /api/conversations
+GET  /api/conversations
+GET  /api/conversations/:id
+DELETE /api/conversations/:id
+POST /api/upload
+DELETE /api/upload/:id
+GET /api/usage
+PATCH /api/preferences
+
+Use proper HTTP status codes.
+
+==================================================
+PROJECT STRUCTURE
+==================================================
+
+Use a clean structure similar to:
+
+/app
+/components
+/components/ui
+/lib
+/lib/ai
+/lib/auth
+/lib/db
+/lib/storage
+/lib/security
+/lib/usage
+/prisma
+/public
+/styles
+/tests
+/docs
+
+Do not create unnecessarily complicated architecture.
+
+==================================================
+TESTING
+==================================================
+
+Create tests for:
+
+- authentication
+- upload validation
+- AI response parsing
+- authorization
+- conversation ownership
+- usage tracking
+- API validation
+- reply generation
+- critical UI flows
+
+At minimum test:
+
+Screenshot upload
+→ analysis
+→ reply generation
+→ copy response
+→ save conversation
+
+==================================================
+DEPLOYMENT
+==================================================
+
+Prepare for deployment on a modern platform such as:
+
+Vercel
+
+Database:
+
+PostgreSQL provider
+
+Storage:
+
+S3-compatible object storage
+
+Do not require a local server for production.
+
+Create:
+
+README.md
+
+with:
+
+- project description
+- architecture
+- local setup
+- environment variables
+- database setup
+- development commands
+- test commands
+- production deployment
+- PWA configuration
+- AI configuration
+
+==================================================
+GITHUB REPOSITORY
+==================================================
+
+If GitHub tooling/authentication is available:
+
+1. Check whether a repository already exists.
+2. If not, create a new private repository named:
+
+replymind
+
+3. Initialize Git.
+4. Create meaningful commits.
+5. Push the complete application.
+6. Do not push secrets.
+7. Verify the remote.
+8. Verify the final branch.
+9. Verify the repository contains the complete source.
+
+If GitHub credentials/tools are unavailable, continue building locally and provide the exact final commands needed to create and push the repository.
+
+==================================================
+BUILD CHECKPOINT SYSTEM
+==================================================
+
+This is extremely important.
+
+Divide the work into milestones:
+
+MILESTONE 1
+Repository + architecture + design system
+
+MILESTONE 2
+Landing page + authentication
+
+MILESTONE 3
+Dashboard + screenshot upload
+
+MILESTONE 4
+xAI integration + screenshot understanding
+
+MILESTONE 5
+Reply generation + tones + rewriting
+
+MILESTONE 6
+Conversation history + database
+
+MILESTONE 7
+Privacy + security + rate limiting
+
+MILESTONE 8
+PWA + mobile optimization
+
+MILESTONE 9
+Testing + bug fixing
+
+MILESTONE 10
+Production deployment configuration
+
+MILESTONE 11
+Final QA
+
+After every milestone:
+
+- update BUILD_STATE.md
+- run tests
+- run typecheck
+- run lint
+- run build
+- commit changes
+
+Commit format:
+
+feat: complete screenshot analysis
+feat: add reply generation
+fix: repair upload validation
+feat: add conversation history
+
+==================================================
+WHEN YOU ARE APPROACHING A LIMIT
+==================================================
+
+DO NOT attempt to cram everything into one response.
+
+Before stopping for any reason:
+
+1. Save all current work.
+2. Update BUILD_STATE.md.
+3. Record exactly what is finished.
+4. Record exactly what remains.
+5. Run the strongest available validation.
+6. Commit the current working state.
+7. Push the commit.
+8. Leave the repository buildable.
+
+The next session must be able to continue without asking me to explain what was already done.
+
+If you have enough execution capacity, continue immediately to the next milestone instead of stopping after a summary.
+
+==================================================
+FINAL QA
+==================================================
+
+Before declaring completion, test the complete flow:
+
+New user
+→ sign up
+→ dashboard
+→ upload screenshot
+→ AI reads screenshot
+→ conversation context extracted
+→ replies generated
+→ change tone
+→ rewrite
+→ copy
+→ save conversation
+→ return later
+→ conversation still available
+→ delete conversation
+→ logout
+→ login again
+
+Also test mobile viewport.
+
+Fix every blocking issue you find.
+
+==================================================
+FINAL OUTPUT
+==================================================
+
+Only after the application is actually implemented, tested and pushed:
+
+Provide:
+
+1. Repository URL
+2. Deployment URL if available
+3. Stack used
+4. Completed features
+5. Required environment variables
+6. Remaining non-blocking items
+7. Latest Git commit
+8. Exact instructions for running locally
+
+DO NOT claim a feature is complete if it has not actually been implemented and tested.
+
+START NOW.
+
+First inspect the available project/design assets and existing repository state.
+
+Then create/update BUILD_STATE.md.
+
+Then begin MILESTONE 1.
+
+Do not wait for unnecessary confirmation.

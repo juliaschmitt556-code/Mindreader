@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "ReplyMind"
+description = "A mobile-first AI PWA that turns screenshots, pasted conversations, and messages into context-aware replies users can edit, copy, and save."
+version = "1.0.0"
+id = "artifacts/replymind"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 23669
+
+[services.development]
+run = "pnpm --filter @workspace/replymind run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/replymind", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/replymind/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "23669"
+BASE_PATH = "/"
