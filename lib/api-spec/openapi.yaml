@@ -10,6 +10,14 @@ servers:
 tags:
   - name: health
     description: Health operations
+  - name: conversations
+    description: Private conversation history and analysis
+  - name: replies
+    description: Generated reply actions
+  - name: uploads
+    description: Private screenshot uploads
+  - name: preferences
+    description: User settings and usage
 paths:
   /healthz:
     get:
@@ -24,7 +32,321 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /conversations:
+    get:
+      operationId: listConversations
+      tags: [conversations]
+      summary: List the current user's recent conversations
+      responses:
+        "200":
+          description: Conversations
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ConversationSummary"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    post:
+      operationId: createConversation
+      tags: [conversations]
+      summary: Create an empty conversation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConversationInput"
+      responses:
+        "201":
+          description: Created conversation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConversationDetail"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /conversations/{id}:
+    parameters:
+      - $ref: "#/components/parameters/ConversationId"
+    get:
+      operationId: getConversation
+      tags: [conversations]
+      summary: Read one owned conversation
+      responses:
+        "200":
+          description: Conversation details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConversationDetail"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      operationId: updateConversation
+      tags: [conversations]
+      summary: Rename, archive, or unarchive a conversation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConversationUpdate"
+      responses:
+        "200":
+          description: Updated conversation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConversationSummary"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      operationId: deleteConversation
+      tags: [conversations]
+      summary: Permanently delete an owned conversation and its private screenshot
+      responses:
+        "204":
+          description: Conversation deleted
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /conversations/{id}/analyze:
+    parameters:
+      - $ref: "#/components/parameters/ConversationId"
+    post:
+      operationId: analyzeConversation
+      tags: [conversations]
+      summary: Understand conversation context and generate suggested replies
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AnalyzeInput"
+      responses:
+        "200":
+          description: Analysis and reply suggestions
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AnalysisResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "502":
+          $ref: "#/components/responses/UpstreamError"
+  /replies/{id}/rewrite:
+    parameters:
+      - $ref: "#/components/parameters/ReplyId"
+    post:
+      operationId: rewriteReply
+      tags: [replies]
+      summary: Rewrite one saved reply suggestion
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RewriteInput"
+      responses:
+        "200":
+          description: Rewritten suggestion
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReplySuggestion"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "502":
+          $ref: "#/components/responses/UpstreamError"
+  /storage/uploads/request-url:
+    post:
+      operationId: requestUploadUrl
+      tags: [uploads]
+      summary: Request a private presigned URL for a screenshot upload
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UploadRequest"
+      responses:
+        "200":
+          description: Presigned upload details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UploadUrl"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /uploads:
+    post:
+      operationId: registerUpload
+      tags: [uploads]
+      summary: Register ownership and metadata after direct screenshot upload
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UploadInput"
+      responses:
+        "201":
+          description: Registered private screenshot
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UploadedScreenshot"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /uploads/{id}:
+    parameters:
+      - $ref: "#/components/parameters/UploadId"
+    delete:
+      operationId: deleteUpload
+      tags: [uploads]
+      summary: Delete an owned private screenshot
+      responses:
+        "204":
+          description: Screenshot deleted
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /preferences:
+    get:
+      operationId: getPreferences
+      tags: [preferences]
+      summary: Read the current user's preferences
+      responses:
+        "200":
+          description: Preferences
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserPreference"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    patch:
+      operationId: updatePreferences
+      tags: [preferences]
+      summary: Update tone, emoji, and appearance preferences
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PreferenceInput"
+      responses:
+        "200":
+          description: Updated preferences
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserPreference"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /usage:
+    get:
+      operationId: getUsage
+      tags: [preferences]
+      summary: Read monthly AI and image usage
+      responses:
+        "200":
+          description: Usage totals and plan
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UsageSummary"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
 components:
+  securitySchemes:
+    clerkSession:
+      type: apiKey
+      in: cookie
+      name: __session
+  parameters:
+    ConversationId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    ReplyId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    UploadId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+  responses:
+    BadRequest:
+      description: Invalid request
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Unauthorized:
+      description: Sign in is required
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    RateLimited:
+      description: Usage limit reached or requests are arriving too quickly
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    UpstreamError:
+      description: The AI provider could not complete the request
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
   schemas:
     HealthStatus:
       type: object
@@ -33,4 +355,312 @@ components:
           type: string
       required:
         - status
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+      required: [error]
+    ReplyTone:
+      type: string
+      enum:
+        - romantic
+        - reassuring
+        - sweet
+        - calm
+        - flirty
+        - playful
+        - natural
+        - apologetic
+        - confident
+        - short
+    ConversationMessage:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        speaker:
+          type: string
+          enum: [me, them, unknown]
+        content:
+          type: string
+        sequence:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, speaker, content, sequence, createdAt]
+    ReplySuggestion:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        tone:
+          $ref: "#/components/schemas/ReplyTone"
+        text:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, tone, text, createdAt]
+    ConversationSummary:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        preview:
+          type: ["string", "null"]
+        messageCount:
+          type: integer
+        isArchived:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required: [id, title, messageCount, isArchived, createdAt, updatedAt]
+    ConversationDetail:
+      allOf:
+        - $ref: "#/components/schemas/ConversationSummary"
+        - type: object
+          properties:
+            messages:
+              type: array
+              items:
+                $ref: "#/components/schemas/ConversationMessage"
+            analysis:
+              oneOf:
+                - $ref: "#/components/schemas/AnalysisResult"
+                - type: "null"
+            screenshot:
+              oneOf:
+                - $ref: "#/components/schemas/UploadedScreenshot"
+                - type: "null"
+          required: [messages, analysis, screenshot]
+    ConversationInput:
+      type: object
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 120
+      required: [title]
+    ConversationUpdate:
+      type: object
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 120
+        isArchived:
+          type: boolean
+    AnalyzeInput:
+      type: object
+      properties:
+        conversationText:
+          type: string
+          maxLength: 16000
+        latestMessage:
+          type: string
+          maxLength: 4000
+        screenshotId:
+          type: ["string", "null"]
+          format: uuid
+        instruction:
+          type: string
+          maxLength: 1000
+        tone:
+          $ref: "#/components/schemas/ReplyTone"
+        includeEmojis:
+          type: boolean
+        retainScreenshot:
+          type: boolean
+    AnalysisMessage:
+      type: object
+      properties:
+        speaker:
+          type: string
+          enum: [me, them, unknown]
+        content:
+          type: string
+        sequence:
+          type: integer
+      required: [speaker, content, sequence]
+    AnalysisResult:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        conversationId:
+          type: string
+          format: uuid
+        summary:
+          type: string
+        tone:
+          type: string
+        relationshipContext:
+          type: string
+        intent:
+          type: string
+        needsClarification:
+          type: boolean
+        messages:
+          type: array
+          items:
+            $ref: "#/components/schemas/ConversationMessage"
+        suggestions:
+          type: array
+          items:
+            $ref: "#/components/schemas/ReplySuggestion"
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - conversationId
+        - summary
+        - tone
+        - relationshipContext
+        - intent
+        - needsClarification
+        - messages
+        - suggestions
+        - createdAt
+    RewriteInput:
+      type: object
+      properties:
+        instruction:
+          type: string
+          minLength: 1
+          maxLength: 200
+        includeEmojis:
+          type: boolean
+      required: [instruction, includeEmojis]
+    UploadRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+        size:
+          type: integer
+          minimum: 1
+          maximum: 10485760
+        contentType:
+          type: string
+          enum: [image/jpeg, image/png, image/webp]
+      required: [name, size, contentType]
+    UploadUrl:
+      type: object
+      properties:
+        uploadURL:
+          type: string
+          format: uri
+        objectPath:
+          type: string
+        metadata:
+          $ref: "#/components/schemas/UploadRequest"
+      required: [uploadURL, objectPath]
+    UploadInput:
+      type: object
+      properties:
+        objectPath:
+          type: string
+          minLength: 1
+          maxLength: 512
+        fileName:
+          type: string
+          minLength: 1
+          maxLength: 255
+        contentType:
+          type: string
+          enum: [image/jpeg, image/png, image/webp]
+        size:
+          type: integer
+          minimum: 1
+          maximum: 10485760
+        conversationId:
+          type: ["string", "null"]
+          format: uuid
+      required: [objectPath, fileName, contentType, size]
+    UploadedScreenshot:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        conversationId:
+          type: ["string", "null"]
+          format: uuid
+        fileName:
+          type: string
+        contentType:
+          type: string
+        size:
+          type: integer
+        objectPath:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, fileName, contentType, size, objectPath, createdAt]
+    UserPreference:
+      type: object
+      properties:
+        defaultTone:
+          $ref: "#/components/schemas/ReplyTone"
+        includeEmojis:
+          type: boolean
+        appearance:
+          type: string
+          enum: [system, light, dark]
+      required: [defaultTone, includeEmojis, appearance]
+    PreferenceInput:
+      type: object
+      properties:
+        defaultTone:
+          $ref: "#/components/schemas/ReplyTone"
+        includeEmojis:
+          type: boolean
+        appearance:
+          type: string
+          enum: [system, light, dark]
+    UsageSummary:
+      type: object
+      properties:
+        plan:
+          type: string
+        month:
+          type: string
+          format: date
+        generations:
+          type: integer
+        imageAnalyses:
+          type: integer
+        storageBytes:
+          type: integer
+        storageLimitBytes:
+          type: integer
+        generationLimit:
+          type: integer
+        imageAnalysisLimit:
+          type: integer
+      required:
+        - plan
+        - month
+        - generations
+        - imageAnalyses
+        - storageBytes
+        - storageLimitBytes
+        - generationLimit
+        - imageAnalysisLimit
 

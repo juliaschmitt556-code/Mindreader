@@ -6,6 +6,10 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export interface HealthStatus {
-  status: string;
+export interface ConversationInput {
+  /**
+     * @minLength 1
+     * @maxLength 120
+     */
+  title: string;
 }

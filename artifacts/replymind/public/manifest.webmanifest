@@ -1,0 +1,18 @@
+{
+  "name": "ReplyMind — Find your words",
+  "short_name": "ReplyMind",
+  "description": "A private space to understand a conversation and find a reply that sounds like you.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f7f5f0",
+  "theme_color": "#f7f5f0",
+  "icons": [
+    {
+      "src": "./replymind-mark.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
