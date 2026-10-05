@@ -32,6 +32,12 @@ const defaultPreferences: UserPreference = {
 
 let databasePromise: Promise<IDBDatabase> | undefined;
 
+async function remote<T>(path: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(`/api/conversations${path}`, { credentials: 'include', ...init, headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) } });
+  if (!response.ok) throw new Error('ReplyMind could not sync conversations.');
+  return response.status === 204 ? (undefined as T) : response.json();
+}
+
 function openDatabase(): Promise<IDBDatabase> {
   if (typeof indexedDB === 'undefined') {
     return Promise.reject(new Error('This browser does not support local conversation storage.'));
@@ -81,7 +87,7 @@ function monthKey(date = new Date()): string {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-01`;
 }
 
-export async function createLocalConversation(title: string): Promise<ConversationDetail> {
+async function createIndexedConversation(title: string): Promise<ConversationDetail> {
   const now = new Date().toISOString();
   const detail: ConversationDetail = {
     id: id(),
@@ -102,7 +108,7 @@ export async function createLocalConversation(title: string): Promise<Conversati
   return detail;
 }
 
-export async function getLocalConversation(id: string): Promise<ConversationDetail | undefined> {
+async function getIndexedConversation(id: string): Promise<ConversationDetail | undefined> {
   const database = await openDatabase();
   const transaction = database.transaction(CONVERSATIONS, 'readonly');
   const result = await requestResult<ConversationDetail | undefined>(
@@ -112,7 +118,7 @@ export async function getLocalConversation(id: string): Promise<ConversationDeta
   return result;
 }
 
-export async function listLocalConversations(): Promise<ConversationSummary[]> {
+async function listIndexedConversations(): Promise<ConversationSummary[]> {
   const database = await openDatabase();
   const transaction = database.transaction(CONVERSATIONS, 'readonly');
   const values = await requestResult<ConversationDetail[]>(
@@ -124,7 +130,7 @@ export async function listLocalConversations(): Promise<ConversationSummary[]> {
     .map(({ messages: _messages, analysis: _analysis, screenshot: _screenshot, ...summary }) => summary);
 }
 
-export async function updateLocalConversation(
+async function updateIndexedConversation(
   conversationId: string,
   changes: ConversationUpdate,
 ): Promise<ConversationSummary> {
@@ -247,7 +253,7 @@ export async function removeLocalScreenshot(screenshotId: string): Promise<void>
   await transactionDone(transaction);
 }
 
-export async function deleteLocalConversation(conversationId: string): Promise<void> {
+async function deleteIndexedConversation(conversationId: string): Promise<void> {
   const database = await openDatabase();
   const transaction = database.transaction([CONVERSATIONS, SCREENSHOTS], 'readwrite');
   const index = transaction.objectStore(SCREENSHOTS).index('conversationId');
@@ -368,6 +374,36 @@ export function toSummary(conversation: ConversationDetail): ConversationSummary
 
 export function screenshotStorageLimit(): number {
   return SCREENSHOT_STORAGE_LIMIT;
+}
+
+export async function createLocalConversation(title: string): Promise<ConversationDetail> {
+  try {
+    const id = crypto.randomUUID();
+    return await remote<ConversationDetail>(`/${id}`, { method: 'PUT', body: JSON.stringify({ id, title }) });
+  } catch {
+    return createIndexedConversation(title);
+  }
+}
+
+export async function getLocalConversation(id: string): Promise<ConversationDetail | undefined> {
+  try { return await remote<ConversationDetail>(`/${encodeURIComponent(id)}`); } catch { return getIndexedConversation(id); }
+}
+
+export async function listLocalConversations(): Promise<ConversationSummary[]> {
+  try {
+    const records = await remote<ConversationDetail[]>('');
+    return records.map(toSummary);
+  } catch { return listIndexedConversations(); }
+}
+
+export async function updateLocalConversation(conversation: ConversationDetail): Promise<void> {
+  try { await remote(`/${encodeURIComponent(conversation.id)}`, { method: 'PUT', body: JSON.stringify(conversation) }); }
+  catch { await updateIndexedConversation(conversation.id, conversation); }
+}
+
+export async function deleteLocalConversation(conversationId: string): Promise<void> {
+  try { await remote(`/${encodeURIComponent(conversationId)}`, { method: 'DELETE' }); }
+  catch { await deleteIndexedConversation(conversationId); }
 }
 
 async function getLocalScreenshotBytes(): Promise<number> {
