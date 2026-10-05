@@ -178,7 +178,7 @@ export function useAnalyzeConversation() {
 export function useUpdateConversation() {
   return useMutation({
     mutationFn: ({ id, data }: { id: string; data: ConversationUpdate }) =>
-      updateLocalConversation(id, data),
+      updateLocalConversation({ id, ...data } as ConversationDetail),
   });
 }
 

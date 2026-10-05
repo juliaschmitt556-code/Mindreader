@@ -174,12 +174,18 @@ importers:
       '@workspace/api-zod':
         specifier: workspace:*
         version: link:../../lib/api-zod
+      drizzle-orm:
+        specifier: 'catalog:'
+        version: 0.45.2(@types/pg@8.23.1)(pg@8.23.0)
       express:
         specifier: ^5.2.1
         version: 5.2.1
       groq-sdk:
         specifier: ^1.6.0
         version: 1.6.0
+      pg:
+        specifier: ^8.23.0
+        version: 8.23.0
       pino:
         specifier: ^9.14.0
         version: 9.14.0
@@ -196,6 +202,9 @@ importers:
       '@types/node':
         specifier: 'catalog:'
         version: 25.9.6
+      '@types/pg':
+        specifier: ^8.23.1
+        version: 8.23.1
       esbuild:
         specifier: 0.28.2
         version: 0.28.2
@@ -632,10 +641,17 @@ importers:
         version: 0.31.10
 
   scripts:
+    dependencies:
+      groq-sdk:
+        specifier: ^1.6.0
+        version: 1.6.0
     devDependencies:
       '@types/node':
         specifier: 'catalog:'
         version: 25.9.6
+      commander:
+        specifier: ^12.0.0
+        version: 12.1.0
       tsx:
         specifier: 'catalog:'
         version: 4.23.13
@@ -2334,6 +2350,10 @@ packages:
 
   colorette@2.0.20:
     resolution: {integrity: sha512-IfEDxwoWIjkeXL1eXcDiow4UbKjhLdq6/EuSVR9GMN7KVH3r9gQ83e73hsz1Nd1T3ijd5xv1wcWRYO+D6kCI2w==}
+
+  commander@12.1.0:
+    resolution: {integrity: sha512-Vw8qHK3bZM9y/P10u3Vib8o/DdkvA2OtPtZvD871QKjy74Wj1WSKFILMPRPSdUSx5RFK1arlJzEtA4PkFgnbuA==}
+    engines: {node: '>=18'}
 
   commander@15.0.0:
     resolution: {integrity: sha512-z67u4ZhzCL/Tydu1lJARtEZYWbWaN7oYLHbsuzocr6y4N6WZAagG3RQ4FW61V1/0+jImpj293XfrcYnd1qxtPg==}
@@ -6898,6 +6918,8 @@ snapshots:
       - '@types/react-dom'
 
   colorette@2.0.20: {}
+
+  commander@12.1.0: {}
 
   commander@15.0.0: {}
 
