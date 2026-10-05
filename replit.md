@@ -1,45 +1,45 @@
-# [Project name]
+# ReplyMind
 
-_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
+ReplyMind helps people understand a conversation and draft a reply that still sounds like them.
 
-## Run & Operate
+## Run & operate
 
-- `pnpm --filter @workspace/api-server run dev` — run the API server (port 5000)
-- `pnpm run typecheck` — full typecheck across all packages
-- `pnpm run build` — typecheck + build all packages
-- `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
-- `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
-- Required env: `DATABASE_URL` — Postgres connection string
+- The managed `artifacts/replymind: web` workflow runs the React/Vite PWA.
+- The managed `artifacts/api-server: API Server` workflow runs the stateless Groq API.
+- `pnpm run typecheck` — typecheck workspace libraries and artifacts.
+- `PORT=23669 BASE_PATH=/ pnpm run build` — typecheck and build all packages outside the managed workflows.
+- `pnpm --filter @workspace/api-spec run codegen` — regenerate API client and Zod schemas from the OpenAPI contract.
+- Configure `GROQ_API_KEY` in Replit Secrets for AI analysis and rewrites. Never put it in source or expose it to the browser.
 
 ## Stack
 
-- pnpm workspaces, Node.js 24, TypeScript 5.9
-- API: Express 5
-- DB: PostgreSQL + Drizzle ORM
-- Validation: Zod (`zod/v4`), `drizzle-zod`
-- API codegen: Orval (from OpenAPI spec)
-- Build: esbuild (CJS bundle)
+- pnpm workspace, TypeScript, React, Vite, TanStack Query, and Express 5.
+- Groq is called by the API server; browser code never receives the Groq key.
+- IndexedDB stores conversations, preferences, local usage counters, and screenshots the user explicitly chooses to keep.
+- No sign-in, user account, cloud history, or cross-browser synchronization.
 
-## Where things live
+## Source map
 
-_Populate as you build — short repo map plus pointers to the source-of-truth file for DB schema, API contracts, theme files, etc._
+- `artifacts/replymind/src/App.tsx` — user-facing routes and interaction flows.
+- `artifacts/replymind/src/lib/local-store.ts` — browser-only IndexedDB persistence.
+- `artifacts/replymind/src/lib/local-hooks.ts` — React Query adapters for IndexedDB and stateless AI calls.
+- `artifacts/replymind/public/sw.js` — installable/offline app shell; AI API requests are not cached.
+- `artifacts/api-server/src/routes/analysis.ts` and `replies.ts` — stateless AI endpoints.
+- `artifacts/api-server/src/lib/ai/` — Groq client, prompts, and response parsing.
+- `lib/api-spec/openapi.yaml` — source of truth for the API contract and generated types.
 
-## Architecture decisions
+## Privacy and data handling
 
-_Populate as you build — non-obvious choices a reader couldn't infer from the code (3-5 bullets)._
+- Conversation history, preferences, and usage counts stay in this browser's IndexedDB.
+- Text and screenshots are sent to the API only when the user requests analysis; screenshots are forwarded to Groq and are not persisted by the API server.
+- Screenshot retention defaults off. When enabled, the image is stored in IndexedDB on this device and can be removed from its conversation or cleared in Settings.
+- The Settings screen's delete action clears all ReplyMind records from this browser.
+- The app shell can load offline, but analysis and rewriting require an internet connection.
+- Browser-local usage limits are convenience limits, not account-wide quotas; clearing browser data also clears those counters.
 
-## Product
+## Product constraints
 
-_Describe the high-level user-facing capabilities of this app once they exist._
-
-## User preferences
-
-_Populate as you build — explicit user instructions worth remembering across sessions._
-
-## Gotchas
-
-_Populate as you build — sharp edges, "always run X before Y" rules._
-
-## Pointers
-
-- See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and package details
+- Keep storage local to the current browser unless the product owner explicitly changes that requirement.
+- Do not add authentication, cloud persistence, or cross-device sync without an explicit product change.
+- Do not store conversation text or screenshot bytes on the API server.
+- Keep screenshots opt-in for local retention and send them only with an explicit AI analysis request.

@@ -1,0 +1,1 @@
+- [ReplyMind local-only data](replymind-local-data.md) — no accounts or cloud sync; saved screenshots remain opt-in and browser-local.

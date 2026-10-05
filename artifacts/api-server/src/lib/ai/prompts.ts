@@ -20,6 +20,7 @@ When the context is clear, return exactly five distinct suggestions: natural, sw
 export function createAnalysisPrompt(input: {
   conversationText?: string;
   latestMessage?: string;
+  contextClarification?: string;
   instruction?: string;
   tone?: string;
   includeEmojis: boolean;
@@ -36,6 +37,9 @@ export function createAnalysisPrompt(input: {
       : "",
     input.latestMessage
       ? `Latest message to reply to:\n${input.latestMessage}`
+      : "",
+    input.contextClarification
+      ? `Clarification supplied by the user:\n${input.contextClarification}`
       : "",
     input.instruction
       ? `What the user wants to communicate:\n${input.instruction}`

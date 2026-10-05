@@ -6,10 +6,10 @@
  * OpenAPI spec version: 1.0.0
  */
 
-export type ConversationMessageSpeaker = typeof ConversationMessageSpeaker[keyof typeof ConversationMessageSpeaker];
+export type PreviousMessageSpeaker = typeof PreviousMessageSpeaker[keyof typeof PreviousMessageSpeaker];
 
 
-export const ConversationMessageSpeaker = {
+export const PreviousMessageSpeaker = {
   me: 'me',
   them: 'them',
   unknown: 'unknown',

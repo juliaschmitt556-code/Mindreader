@@ -1,20 +1,16 @@
 import { useEffect, useRef, useState, type ButtonHTMLAttributes, type ChangeEvent, type DragEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
-import { ClerkProvider, SignIn, SignUp, UserButton, useAuth, useUser } from '@clerk/react';
-import { publishableKeyFromHost } from '@clerk/react/internal';
-import { shadcn } from '@clerk/themes';
 import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query';
 import {
   useAnalyzeConversation,
   useCreateConversation,
   useDeleteConversation,
   useDeleteUpload,
+  useClearLocalData,
   useGetConversation,
   useGetPreferences,
   useGetUsage,
   useHealthCheck,
   useListConversations,
-  useRegisterUpload,
-  useRequestUploadUrl,
   useRewriteReply,
   useUpdateConversation,
   useUpdatePreferences,
@@ -22,7 +18,7 @@ import {
   getGetPreferencesQueryKey,
   getGetUsageQueryKey,
   getListConversationsQueryKey,
-} from '@workspace/api-client-react';
+} from '@/lib/local-hooks';
 import type { ReplyTone, UserPreferenceAppearance } from '@workspace/api-client-react';
 import {
   ArrowDownRight,
@@ -52,22 +48,12 @@ import {
 } from 'lucide-react';
 import { Link, Route, Router, Switch, useLocation } from 'wouter';
 import NotFound from '@/pages/not-found';
+import { deleteLocalConversation, getLocalConversation } from '@/lib/local-store';
 
 const queryClient = new QueryClient();
-const publishableKey = publishableKeyFromHost(
-  window.location.hostname,
-  import.meta.env.VITE_CLERK_PUBLISHABLE_KEY,
-);
-const clerkProxyUrl = import.meta.env.VITE_CLERK_PROXY_URL;
 const BASE = (import.meta.env.BASE_URL || '/').replace(/\/?$/, '/');
 const basePath = BASE.replace(/\/$/, '');
 const fullPath = (path: string) => `${BASE}${path.replace(/^\//, '')}`;
-const stripBase = (path: string) =>
-  basePath && path.startsWith(basePath) ? path.slice(basePath.length) || '/' : path;
-
-if (!publishableKey) {
-  throw new Error('Missing VITE_CLERK_PUBLISHABLE_KEY. Clerk Auth must be configured before the app can start.');
-}
 const tones: { value: ReplyTone; label: string; note: string }[] = [
   { value: 'natural', label: 'Natural', note: 'Like you, on a good day' },
   { value: 'reassuring', label: 'Reassuring', note: 'Warm and steady' },
@@ -98,6 +84,54 @@ function StatusNote({ children, error = false }: { children: ReactNode; error?: 
   return <div className={`status-note ${error ? 'status-error' : ''}`} role={error ? 'alert' : 'status'}>{children}</div>;
 }
 
+async function prepareScreenshot(source: File): Promise<File> {
+  const maximumInputSize = 30 * 1024 * 1024;
+  const maximumUploadSize = 10 * 1024 * 1024;
+  if (source.size > maximumInputSize) {
+    throw new Error('Choose an image under 30 MB so ReplyMind can optimize it safely.');
+  }
+  if (typeof createImageBitmap !== 'function') {
+    if (source.size > maximumUploadSize) throw new Error('This browser cannot compress the image. Choose one under 10 MB.');
+    return source;
+  }
+
+  const bitmap = await createImageBitmap(source);
+  const largestSide = Math.max(bitmap.width, bitmap.height);
+  if (largestSide <= 2048 && source.size <= 3 * 1024 * 1024) {
+    bitmap.close();
+    return source;
+  }
+  const scale = Math.min(1, 2048 / largestSide);
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+  canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+  const context = canvas.getContext('2d');
+  if (!context) {
+    bitmap.close();
+    throw new Error('This browser could not prepare the screenshot. Try another image.');
+  }
+  context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  bitmap.close();
+
+  const compress = (quality: number) => new Promise<Blob>((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (blob) resolve(blob);
+      else reject(new Error('This browser could not compress the screenshot.'));
+    }, 'image/webp', quality);
+  });
+  let optimized = await compress(0.9);
+  if (optimized.size > maximumUploadSize) optimized = await compress(0.76);
+  if (optimized.size > maximumUploadSize) {
+    throw new Error('The screenshot is still over 10 MB after compression. Choose a smaller image.');
+  }
+  if (!['image/webp', 'image/png', 'image/jpeg'].includes(optimized.type)) {
+    throw new Error('This browser could not create a supported screenshot format.');
+  }
+  const extension = optimized.type === 'image/png' ? 'png' : optimized.type === 'image/jpeg' ? 'jpg' : 'webp';
+  const baseName = source.name.replace(/\.[^.]+$/, '') || 'screenshot';
+  return new File([optimized], `${baseName}.${extension}`, { type: optimized.type });
+}
+
 function Landing() {
   const health = useHealthCheck();
   return <div className="landing grain">
@@ -108,8 +142,7 @@ function Landing() {
         <a href="#privacy">Privacy</a>
       </nav>
       <div className="header-actions">
-        <Link href="/sign-in" className="text-link">Sign in</Link>
-        <Link href="/sign-up" className="button button-primary header-cta">Get started <ArrowRight size={15} /></Link>
+        <Link href="/app" className="button button-primary header-cta">Open ReplyMind <ArrowRight size={15} /></Link>
       </div>
     </header>
 
@@ -120,8 +153,8 @@ function Landing() {
           <h1>Know what they<br />mean. <em>Say what you</em><br /><em>mean.</em></h1>
           <p className="hero-description">A second pair of eyes for the conversations that matter. Find the feeling underneath the words, then reply in a way that still sounds like you.</p>
           <div className="hero-cta-row">
-            <Link href="/sign-up" className="button button-primary button-large">Find your words <ArrowRight size={17} /></Link>
-            <span className="micro-note"><LockKeyhole size={13} /> Private by design</span>
+            <Link href="/app" className="button button-primary button-large">Find your words <ArrowRight size={17} /></Link>
+            <span className="micro-note"><LockKeyhole size={13} /> Saved on this device</span>
           </div>
           <div className="hero-footnote"><span className="avatars"><i>J</i><i>M</i><i>A</i></span><span>For the moments you want to get right.</span></div>
         </div>
@@ -171,71 +204,17 @@ function Landing() {
 
       <section className="privacy-section" id="privacy">
         <div className="privacy-orbit"><div className="orbit-ring orbit-ring-a" /><div className="orbit-ring orbit-ring-b" /><div className="privacy-lock"><ShieldCheck size={35} strokeWidth={1.5} /></div><span className="orbit-dot orbit-dot-a" /><span className="orbit-dot orbit-dot-b" /></div>
-        <div className="privacy-copy"><span className="section-index">03 — YOURS TO KEEP PRIVATE</span><h2>Your conversations<br />stay <em>yours.</em></h2><p>Private moments deserve a private place. Your conversations are saved to your account so you can revisit them, and only you can see them.</p><Link href="/sign-up" className="underlined-link">Start with a little more clarity <ArrowRight size={15} /></Link></div>
+        <div className="privacy-copy"><span className="section-index">03 — YOURS TO KEEP PRIVATE</span><h2>Your conversations<br />stay <em>yours.</em></h2><p>Your history and preferences stay in this browser. When you request an analysis, the text or screenshot you share is sent to Groq for processing and is not saved on ReplyMind’s server.</p><Link href="/app" className="underlined-link">Start with a little more clarity <ArrowRight size={15} /></Link></div>
       </section>
 
-      <section className="closing-cta"><span className="closing-asterisk"><Sparkles size={24} /></span><span className="section-index">WHEN YOU’RE READY</span><h2>Take the pressure<br />out of the <em>reply.</em></h2><Link href="/sign-up" className="button button-primary button-large">Let’s get started <ArrowRight size={17} /></Link><span className="closing-reassurance">Your voice. A little more clarity.</span></section>
+      <section className="closing-cta"><span className="closing-asterisk"><Sparkles size={24} /></span><span className="section-index">WHEN YOU’RE READY</span><h2>Take the pressure<br />out of the <em>reply.</em></h2><Link href="/app" className="button button-primary button-large">Let’s get started <ArrowRight size={17} /></Link><span className="closing-reassurance">Your voice. A little more clarity.</span></section>
     </main>
-    <footer className="site-footer"><Logo /><span>For the words that matter.</span><div><Link href="/sign-in">Sign in</Link><Link href="/sign-up">Create account</Link></div><small>© ReplyMind</small></footer>
+    <footer className="site-footer"><Logo /><span>For the words that matter.</span><div><Link href="/app">Open ReplyMind</Link></div><small>© ReplyMind</small></footer>
     {health.isError && <span className="sr-only">Service health status is currently unavailable.</span>}
   </div>;
 }
 
-function AuthPage({ kind }: { kind: 'sign-in' | 'sign-up' }) {
-  const isSignIn = kind === 'sign-in';
-  return <main className="auth-page grain">
-    <div className="auth-top"><Logo /><Link href="/" className="back-home"><ArrowLeft size={15} /> Back to home</Link></div>
-    <div className="auth-frame">
-      <div className="auth-side">
-        <span className="section-index">A SPACE TO THINK IT THROUGH</span>
-        <h1>{isSignIn ? 'Your words are\nwaiting.' : 'Let’s make room\nfor your voice.'}</h1>
-        <p>{isSignIn ? 'Pick up where you left off. Your conversations stay private, just for you.' : 'A little more clarity can change how a conversation feels.'}</p>
-        <div className="auth-quote"><span>“</span><p>You don’t have to find the perfect words. Just the ones that feel like yours.</p></div>
-      </div>
-      <div className="auth-card">
-        {!publishableKey ? <StatusNote error>Sign-in is being configured. Please try again shortly.</StatusNote> :
-          isSignIn ? <SignIn routing="path" path={fullPath('sign-in')} signUpUrl={fullPath('sign-up')} appearance={clerkAppearance} /> :
-            <SignUp routing="path" path={fullPath('sign-up')} signInUrl={fullPath('sign-in')} appearance={clerkAppearance} />}
-      </div>
-    </div>
-    <p className="auth-footer"><LockKeyhole size={13} /> Your private conversations are never public.</p>
-  </main>;
-}
-
-const clerkAppearance = {
-  theme: shadcn,
-  cssLayerName: 'clerk',
-  variables: {
-    colorPrimary: '#356b5a',
-    colorForeground: '#303642',
-    colorMutedForeground: '#727985',
-    colorBackground: '#fffefa',
-    colorInput: '#f7f5f0',
-    colorInputForeground: '#303642',
-    colorNeutral: '#d9d6cd',
-    colorDanger: '#b5473b',
-    borderRadius: '14px', fontFamily: 'DM Sans, sans-serif',
-  },
-  elements: {
-    card: 'clerk-card',
-    headerTitle: 'clerk-title',
-    headerSubtitle: 'clerk-subtitle',
-    socialButtonsBlockButton: 'clerk-social',
-    formButtonPrimary: 'clerk-primary',
-    footerActionLink: 'clerk-link',
-  },
-};
-
-function RequireAuth({ children }: { children: ReactNode }) {
-  const { isLoaded, isSignedIn } = useAuth();
-  const [, setLocation] = useLocation();
-  useEffect(() => { if (isLoaded && !isSignedIn) setLocation('/sign-in'); }, [isLoaded, isSignedIn, setLocation]);
-  if (!isLoaded || !isSignedIn) return <main className="loading-screen"><div className="loading-mark"><MessageCircle size={21} /></div><div className="skeleton-line" /><div className="skeleton-line skeleton-short" /><span>Opening your private space…</span></main>;
-  return <>{children}</>;
-}
-
 function AppShell({ children, active = 'app' }: { children: ReactNode; active?: 'app' | 'settings' }) {
-  const { user } = useUser();
   return <div className="app-shell">
     <aside className="desktop-sidebar">
       <Logo />
@@ -243,14 +222,14 @@ function AppShell({ children, active = 'app' }: { children: ReactNode; active?: 
       <Link href="/app" className={`side-link ${active === 'app' ? 'is-active' : ''}`}><MessageCircle size={17} /> Conversations</Link>
       <Link href="/settings" className={`side-link ${active === 'settings' ? 'is-active' : ''}`}><Settings2 size={17} /> Settings</Link>
       <div className="sidebar-spacer" />
-      <div className="sidebar-private"><ShieldCheck size={16} /><span><strong>Private, always</strong><small>Your conversations are yours.</small></span></div>
-      <div className="side-profile"><UserButton signOutFallbackRedirectUrl={fullPath('/')} /><span><strong>{user?.firstName || 'Your space'}</strong><small>{user?.primaryEmailAddress?.emailAddress || 'Personal account'}</small></span></div>
+      <div className="sidebar-private"><ShieldCheck size={16} /><span><strong>Saved on this device</strong><small>No account or cross-device sync.</small></span></div>
+      <div className="side-profile"><span className="profile-avatar">R</span><span><strong>Your device</strong><small>Saved in this browser</small></span></div>
     </aside>
     <div className="app-main">
       <header className="app-topbar">
         <Logo compact />
         <div className="app-topbar-title">{active === 'settings' ? 'Your settings' : 'Your conversations'}</div>
-        <div className="app-topbar-actions"><Link href="/settings" className="mobile-settings" aria-label="Settings"><Settings2 size={19} /></Link><UserButton signOutFallbackRedirectUrl={fullPath('/')} /></div>
+        <div className="app-topbar-actions"><Link href="/settings" className="mobile-settings" aria-label="Settings"><Settings2 size={19} /></Link></div>
       </header>
       <main className="app-content">{children}</main>
       <nav className="mobile-nav" aria-label="App navigation">
@@ -267,47 +246,48 @@ function ConversationComposer() {
   const prefs = useGetPreferences();
   const createConversation = useCreateConversation();
   const analyze = useAnalyzeConversation();
-  const requestUpload = useRequestUploadUrl();
-  const registerUpload = useRegisterUpload();
   const [text, setText] = useState('');
   const [latestMessage, setLatestMessage] = useState('');
   const [title, setTitle] = useState('');
   const [file, setFile] = useState<File | null>(null);
   const [retainScreenshot, setRetainScreenshot] = useState(false);
+  const [preparingScreenshot, setPreparingScreenshot] = useState(false);
   const [error, setError] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
-  const pending = createConversation.isPending || analyze.isPending || requestUpload.isPending || registerUpload.isPending;
+  const pending = createConversation.isPending || analyze.isPending || preparingScreenshot;
 
-  const pickFile = (picked?: File) => {
+  const pickFile = async (picked?: File) => {
     if (!picked) return;
     const allowed = ['image/jpeg', 'image/png', 'image/webp'];
     if (!allowed.includes(picked.type)) { setError('Choose a JPG, PNG, or WebP screenshot.'); return; }
-    if (picked.size > 10 * 1024 * 1024) { setError('Screenshots need to be under 10 MB.'); return; }
     setError('');
-    setFile(picked);
+    setPreparingScreenshot(true);
+    try {
+      const optimized = await prepareScreenshot(picked);
+      setFile(optimized);
+      setRetainScreenshot(false);
+    } catch (reason) {
+      setFile(null);
+      setError(reason instanceof Error ? reason.message : 'The screenshot could not be prepared.');
+    } finally {
+      setPreparingScreenshot(false);
+    }
   };
   const onDrop = (event: DragEvent<HTMLDivElement>) => { event.preventDefault(); pickFile(event.dataTransfer.files[0]); };
   const startAnalysis = async () => {
     setError('');
     if (!text.trim() && !latestMessage.trim() && !file) { setError('Add a conversation or screenshot first.'); return; }
+    let conversationId: string | undefined;
     try {
       const created = await createConversation.mutateAsync({ data: { title: title.trim() || (latestMessage.trim() || text.trim()).split('\n')[0].slice(0, 72) || 'A new conversation' } });
-      let screenshotId: string | undefined;
-      if (file) {
-        const presigned = await requestUpload.mutateAsync({ data: { name: file.name, contentType: file.type as 'image/jpeg' | 'image/png' | 'image/webp', size: file.size } });
-        const uploaded = await fetch(presigned.uploadURL, { method: 'PUT', headers: { 'Content-Type': file.type }, body: file });
-        if (!uploaded.ok) throw new Error('The screenshot could not be uploaded. Please try again.');
-        const registered = await registerUpload.mutateAsync({ data: { objectPath: presigned.objectPath, fileName: file.name, contentType: file.type as 'image/jpeg' | 'image/png' | 'image/webp', size: file.size, conversationId: created.id } });
-        screenshotId = registered.id;
-      }
+      conversationId = created.id;
       await analyze.mutateAsync({ id: created.id, data: {
         ...(text.trim() ? { conversationText: text.trim() } : {}),
         ...(latestMessage.trim() ? { latestMessage: latestMessage.trim() } : {}),
-        ...(screenshotId ? { screenshotId } : {}),
         tone: prefs.data?.defaultTone || 'natural',
         includeEmojis: prefs.data?.includeEmojis ?? false,
-        retainScreenshot: retainScreenshot && Boolean(screenshotId),
-      } });
+        retainScreenshot: retainScreenshot && Boolean(file),
+      }, screenshotFile: file ?? undefined });
       await Promise.all([
         client.invalidateQueries({ queryKey: getListConversationsQueryKey() }),
         client.invalidateQueries({ queryKey: getGetConversationQueryKey(created.id) }),
@@ -315,30 +295,34 @@ function ConversationComposer() {
       ]);
       setLocation(`/conversation/${created.id}`);
     } catch (reason) {
+      if (conversationId) {
+        const saved = await getLocalConversation(conversationId).catch(() => undefined);
+        if (saved && !saved.analysis) await deleteLocalConversation(conversationId).catch(() => undefined);
+      }
       setError(reason instanceof Error ? reason.message : 'Something went wrong. Your draft is still here — try again.');
     }
   };
 
   return <section className="composer-panel">
-    <div className="composer-heading"><span className="eyebrow-small"><Sparkles size={14} /> A FRESH PERSPECTIVE</span><span className="private-label"><LockKeyhole size={12} /> Only you can see this</span></div>
+    <div className="composer-heading"><span className="eyebrow-small"><Sparkles size={14} /> A FRESH PERSPECTIVE</span><span className="private-label"><LockKeyhole size={12} /> No account or sync</span></div>
     <h2>What’s on your mind?</h2>
     <p className="panel-subtitle">Share the part you keep thinking about. We’ll help you read it with a little more room to breathe.</p>
     <label className="field-label" htmlFor="conversation-title">Give this conversation a name <span>optional</span></label>
     <input id="conversation-title" className="text-input title-input" value={title} maxLength={120} onChange={(event) => setTitle(event.target.value)} placeholder="A name you’ll recognize later" data-testid="input-conversation-title" />
     <label className="field-label" htmlFor="conversation-text">Paste the conversation <span>up to 16,000 characters</span></label>
     <textarea id="conversation-text" className="conversation-input" value={text} maxLength={16000} onChange={(event) => setText(event.target.value)} placeholder={"Paste the messages here — include names or labels if it helps.\n\nYou can keep it short. Just share enough to understand the moment."} data-testid="input-conversation-text" />
-    <div className="input-bottom"><span>Text stays in your private space.</span><span>{text.length.toLocaleString()} / 16,000</span></div>
+    <div className="input-bottom"><span>Your draft is sent only when you request an analysis.</span><span>{text.length.toLocaleString()} / 16,000</span></div>
     <div className="or-divider"><span /> OR <span /></div>
     <div className="latest-field"><div><label htmlFor="latest-message" className="field-label">Just the latest message</label><p>Start with one message if that’s all you have.</p></div><textarea id="latest-message" className="latest-input" value={latestMessage} maxLength={4000} onChange={(event) => setLatestMessage(event.target.value)} placeholder="What did they say?" data-testid="input-latest-message" /></div>
-    <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" aria-label="Choose a conversation screenshot" onChange={(event: ChangeEvent<HTMLInputElement>) => pickFile(event.target.files?.[0])} data-testid="input-screenshot-file" />
+    <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" aria-label="Choose a conversation screenshot" onChange={(event: ChangeEvent<HTMLInputElement>) => { const picked = event.currentTarget.files?.[0]; event.currentTarget.value = ''; void pickFile(picked); }} data-testid="input-screenshot-file" />
     <div className="upload-drop" onDragOver={(event) => event.preventDefault()} onDrop={onDrop}>
-      <button type="button" className="upload-button" onClick={() => fileRef.current?.click()} disabled={pending}><span className="upload-icon"><ImagePlus size={19} /></span><span><strong>{file ? file.name : 'Add a screenshot'}</strong><small>{file ? `${(file.size / 1024 / 1024).toFixed(1)} MB · ready to upload` : 'JPG, PNG, or WebP · up to 10 MB'}</small></span><Upload size={16} className="upload-arrow" /></button>
-      {file && <button type="button" className="remove-file" aria-label="Remove screenshot" onClick={() => setFile(null)}><X size={15} /></button>}
+      <button type="button" className="upload-button" onClick={() => fileRef.current?.click()} disabled={pending}><span className="upload-icon"><ImagePlus size={19} /></span><span><strong>{preparingScreenshot ? 'Optimizing screenshot…' : file ? file.name : 'Add a screenshot'}</strong><small>{file ? `${(file.size / 1024 / 1024).toFixed(1)} MB · ready to analyze` : 'JPG, PNG, or WebP · optimized to 10 MB'}</small></span><Upload size={16} className="upload-arrow" /></button>
+       {file && <button type="button" className="remove-file" aria-label="Remove screenshot" onClick={() => { setFile(null); setRetainScreenshot(false); if (fileRef.current) fileRef.current.value = ''; }}><X size={15} /></button>}
     </div>
-    {file && <label className="screenshot-retain-option"><input type="checkbox" checked={retainScreenshot} onChange={(event) => setRetainScreenshot(event.target.checked)} /><span><strong>Keep this screenshot with the conversation</strong><small>Off by default. If unchecked, ReplyMind deletes the upload after analysis.</small></span></label>}
-    <p className="screenshot-processing-note">Screenshots are sent to Groq for analysis. We delete them after processing unless you choose to keep one.</p>
+     {file && <label className="screenshot-retain-option"><input type="checkbox" checked={retainScreenshot} onChange={(event) => setRetainScreenshot(event.target.checked)} /><span><strong>Keep this screenshot with the conversation</strong><small>Off by default. If unchecked, no copy is saved after analysis.</small></span></label>}
+    <p className="screenshot-processing-note">Screenshots go to Groq for analysis. A copy stays in this browser only if you switch on “Keep this screenshot.”</p>
     {error && <StatusNote error>{error}</StatusNote>}
-    {(createConversation.isPending || analyze.isPending || requestUpload.isPending || registerUpload.isPending) && <div className="progress-message" role="status"><span className="pulse-dot" />{requestUpload.isPending || registerUpload.isPending ? 'Adding your screenshot…' : createConversation.isPending ? 'Making a private space…' : 'Looking at the context…'}</div>}
+    {pending && <div className="progress-message" role="status"><span className="pulse-dot" />{preparingScreenshot ? 'Optimizing your screenshot…' : createConversation.isPending ? 'Making a private space…' : 'Looking at the context…'}</div>}
     <div className="composer-submit-row"><span><LockKeyhole size={13} /> A thoughtful read, not a verdict.</span><Button className="submit-reply" onClick={startAnalysis} disabled={pending || (!text.trim() && !latestMessage.trim() && !file)} data-testid="button-analyze-conversation">{pending ? <><span className="button-loader" /> One moment</> : <>Help me understand <ArrowRight size={16} /></>}</Button></div>
   </section>;
 }
@@ -357,7 +341,7 @@ function Dashboard() {
           conversations.isError ? <div className="empty-history"><StatusNote error>We couldn’t load your conversations.</StatusNote><Button variant="soft" onClick={() => conversations.refetch()}>Try again</Button></div> :
             items.length ? <div className="conversation-list">{items.map((item) => <ConversationRow key={item.id} item={item} />)}</div> :
               <div className="empty-history"><div className="empty-icon"><Clock3 size={20} /></div><strong>{showArchived ? 'Nothing saved away yet' : 'Your space is ready'}</strong><p>{showArchived ? 'Conversations you archive will be here.' : 'Start with the conversation on your mind. You can come back to it whenever you need.'}</p><span className="empty-line" /></div>}
-        <div className="history-note"><ShieldCheck size={15} /><span>Private by default.<br /><b>Only you can revisit these.</b></span></div>
+        <div className="history-note"><ShieldCheck size={15} /><span>Saved only in this browser.<br /><b>Not synced to an account.</b></span></div>
       </aside>
     </div>
   </AppShell>;
@@ -400,6 +384,7 @@ function ConversationPage({ id }: { id: string }) {
   const [copied, setCopied] = useState('');
   const [rewritePrompts, setRewritePrompts] = useState<Record<string, string>>({});
   const [rewriteOutput, setRewriteOutput] = useState<Record<string, string>>({});
+  const [clarificationText, setClarificationText] = useState('');
   const [error, setError] = useState('');
   const conversation = detail.data;
   const invalidate = async () => Promise.all([
@@ -443,9 +428,15 @@ function ConversationPage({ id }: { id: string }) {
   const runAgain = async () => {
     if (!conversation) return;
     try {
-      const source = conversation.messages.map((message) => `${message.speaker === 'me' ? 'Me' : message.speaker === 'them' ? 'Them' : 'Unknown'}: ${message.content}`).join('\n');
-      await analyze.mutateAsync({ id, data: { conversationText: source, screenshotId: conversation.screenshot?.id || undefined, tone: prefs.data?.defaultTone || 'natural', includeEmojis: prefs.data?.includeEmojis ?? false } });
+      await analyze.mutateAsync({ id, data: {
+        previousMessages: conversation.messages,
+        screenshotId: conversation.screenshot?.id || undefined,
+        contextClarification: clarificationText.trim() || undefined,
+        tone: prefs.data?.defaultTone || 'natural',
+        includeEmojis: prefs.data?.includeEmojis ?? false,
+      } });
       await Promise.all([invalidate(), client.invalidateQueries({ queryKey: getGetUsageQueryKey() })]);
+      setClarificationText('');
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'We couldn’t take another look right now.'); }
   };
   const removeScreenshot = async () => {
@@ -466,13 +457,14 @@ function ConversationPage({ id }: { id: string }) {
             {error && <StatusNote error>{error}</StatusNote>}
             <section className="analysis-card">
               <div className="analysis-heading"><div className="insight-icon"><Sparkles size={18} /></div><div><span className="eyebrow-small">A THOUGHTFUL READ</span><h2>What might be going on</h2></div></div>
-              {conversation.analysis ? <div className="analysis-copy">
+            {conversation.analysis ? <div className="analysis-copy">
                 <p className="analysis-summary">{conversation.analysis.summary}</p>
                 <div className="context-grid"><div className="context-item"><span>THE TONE</span><p>{conversation.analysis.tone}</p></div><div className="context-item"><span>THE CONTEXT</span><p>{conversation.analysis.relationshipContext}</p></div><div className="context-item"><span>THE POSSIBLE INTENT</span><p>{conversation.analysis.intent}</p></div></div>
+                {conversation.analysis.needsClarification && <div className="clarification-box"><strong>Help us understand what was missed</strong><p>Add the unreadable or missing words below. This clarification stays in this browser and is sent with your next analysis request.</p><label className="sr-only" htmlFor="analysis-clarification">Add missing conversation details</label><textarea id="analysis-clarification" value={clarificationText} onChange={(event) => setClarificationText(event.target.value)} maxLength={4000} placeholder="What did the message say, or what context should ReplyMind know?" /><Button variant="soft" onClick={runAgain} disabled={analyze.isPending || !clarificationText.trim()}>{analyze.isPending ? 'Taking another look…' : 'Try again with this detail'}</Button></div>}
               </div> : <div className="analysis-empty"><p>No read on this one yet. You can take another look whenever you’re ready.</p><Button variant="soft" onClick={runAgain} disabled={analyze.isPending}>{analyze.isPending ? 'Taking a look…' : <><RotateCcw size={15} /> Analyze conversation</>}</Button></div>}
             </section>
             {conversation.messages.length > 0 && <section className="message-context"><div className="section-title-row"><div><span className="eyebrow-small">THE CONTEXT</span><h2>Messages shared</h2></div><span className="context-count">{conversation.messages.length} messages</span></div><div className="message-stack">{conversation.messages.map((message) => <div className={`context-message ${message.speaker === 'me' ? 'context-me' : ''}`} key={message.id}><span className="speaker-label">{message.speaker === 'me' ? 'YOU' : message.speaker === 'them' ? 'THEM' : 'MESSAGE'}</span><p>{message.content}</p></div>)}</div></section>}
-            {conversation.screenshot && <section className="saved-image"><span className="saved-image-icon"><FileImage size={17} /></span><span><strong>{conversation.screenshot.fileName}</strong><small>{(conversation.screenshot.size / 1024 / 1024).toFixed(1)} MB · private screenshot</small></span><button className="icon-button icon-danger" aria-label="Remove saved screenshot" onClick={removeScreenshot} disabled={deleteUpload.isPending}><Trash2 size={16} /></button></section>}
+            {conversation.screenshot && <section className="saved-image"><span className="saved-image-icon"><FileImage size={17} /></span><span><strong>{conversation.screenshot.fileName}</strong><small>{(conversation.screenshot.size / 1024 / 1024).toFixed(1)} MB · saved in this browser</small></span><button className="icon-button icon-danger" aria-label="Remove saved screenshot" onClick={removeScreenshot} disabled={deleteUpload.isPending}><Trash2 size={16} /></button></section>}
           </div>
           <aside className="reply-column"><div className="reply-header"><span className="eyebrow-small"><Sparkles size={13} /> YOUR NEXT WORDS</span><h2>Replies that sound like you.</h2><p>Pick one as a starting point. You can always make it your own.</p></div>
             {conversation.analysis?.suggestions?.length ? <div className="reply-options">{conversation.analysis.suggestions.map((suggestion) => <article className="reply-card" key={suggestion.id}>
@@ -494,8 +486,8 @@ function SettingsPage() {
   const updatePrefs = useUpdatePreferences();
   const updateConversation = useUpdateConversation();
   const deleteConversation = useDeleteConversation();
+  const clearLocalData = useClearLocalData();
   const client = useQueryClient();
-  const { user } = useUser();
   const [message, setMessage] = useState('');
   const appearance = prefs.data?.appearance || 'system';
   useEffect(() => {
@@ -524,7 +516,15 @@ function SettingsPage() {
     try { await deleteConversation.mutateAsync({ id }); await client.invalidateQueries({ queryKey: getListConversationsQueryKey() }); }
     catch (reason) { setMessage(reason instanceof Error ? reason.message : 'Could not delete that conversation.'); }
   };
-  const isUpdating = updatePrefs.isPending || updateConversation.isPending || deleteConversation.isPending;
+  const clearData = async () => {
+    if (!window.confirm('Delete all conversations, saved screenshots, usage counts, and preferences from this browser? This cannot be undone.')) return;
+    try {
+      await clearLocalData.mutateAsync();
+      await client.invalidateQueries();
+      setMessage('All ReplyMind data was deleted from this browser.');
+    } catch (reason) { setMessage(reason instanceof Error ? reason.message : 'Could not clear local data.'); }
+  };
+  const isUpdating = updatePrefs.isPending || updateConversation.isPending || deleteConversation.isPending || clearLocalData.isPending;
 
   return <AppShell active="settings">
     <div className="page-heading settings-heading"><div><span className="eyebrow-small">MAKE THIS SPACE YOURS</span><h1>Your settings</h1><p>Small preferences, kept just for you.</p></div><div className="heading-mark"><Settings2 size={22} /></div></div>
@@ -533,8 +533,8 @@ function SettingsPage() {
     {prefs.isError && <StatusNote error>We couldn’t load your preferences. <button className="inline-action" onClick={() => prefs.refetch()}>Try again</button></StatusNote>}
     <div className="settings-layout">
       <div className="settings-primary">
-        <section className="settings-card profile-card"><div className="settings-section-heading"><div className="settings-icon"><Heart size={18} /></div><div><h2>Your profile</h2><p>Your account, in your own space.</p></div></div>
-          <div className="profile-line"><span className="profile-avatar">{(user?.firstName || user?.primaryEmailAddress?.emailAddress || 'R').slice(0, 1).toUpperCase()}</span><span><strong>{user?.fullName || user?.firstName || 'ReplyMind member'}</strong><small>{user?.primaryEmailAddress?.emailAddress || 'Your signed-in account'}</small></span><span className="profile-managed"><LockKeyhole size={12} /> managed by Clerk</span></div>
+        <section className="settings-card profile-card"><div className="settings-section-heading"><div className="settings-icon"><Heart size={18} /></div><div><h2>This browser</h2><p>No account or sign-in is used.</p></div></div>
+          <div className="profile-line"><span className="profile-avatar">R</span><span><strong>Local ReplyMind space</strong><small>Conversations and preferences stay on this device.</small></span><span className="profile-managed"><LockKeyhole size={12} /> device only</span></div>
         </section>
         <section className="settings-card"><div className="settings-section-heading"><div className="settings-icon"><MessageCircle size={18} /></div><div><h2>Your reply style</h2><p>Choose the starting tone you reach for most.</p></div></div>
           <div className="tone-settings">{tones.map((tone) => <button type="button" key={tone.value} className={`tone-setting ${prefs.data?.defaultTone === tone.value ? 'tone-selected' : ''}`} onClick={() => savePreference({ defaultTone: tone.value })} disabled={isUpdating} aria-pressed={prefs.data?.defaultTone === tone.value} data-testid={`button-tone-${tone.value}`}><span className="tone-radio">{prefs.data?.defaultTone === tone.value && <Check size={12} />}</span><span><strong>{tone.label}</strong><small>{tone.note}</small></span></button>)}</div>
@@ -544,10 +544,10 @@ function SettingsPage() {
         <section className="settings-card"><div className="settings-section-heading"><div className="settings-icon"><Sun size={18} /></div><div><h2>Appearance</h2><p>Choose what feels easy on your eyes.</p></div></div>
           <div className="appearance-options">{(['system', 'light', 'dark'] as UserPreferenceAppearance[]).map((choice) => <button key={choice} onClick={() => savePreference({ appearance: choice })} disabled={isUpdating} className={`appearance-choice ${appearance === choice ? 'appearance-selected' : ''}`} aria-pressed={appearance === choice} data-testid={`button-appearance-${choice}`}>{choice === 'dark' ? <Moon size={16} /> : choice === 'light' ? <Sun size={16} /> : <Settings2 size={16} />}<span>{choice[0].toUpperCase() + choice.slice(1)}</span>{appearance === choice && <Check size={14} />}</button>)}</div>
         </section>
-        <section className="settings-card privacy-card"><div className="settings-section-heading"><div className="settings-icon"><ShieldCheck size={18} /></div><div><h2>Your privacy</h2><p>We keep this space personal.</p></div></div><div className="privacy-points"><div><LockKeyhole size={15} /><span><strong>Only you can see your conversations</strong><small>Your saved context stays attached to your account.</small></span></div><div><FileImage size={15} /><span><strong>Screenshots are kept private</strong><small>Remove a saved screenshot from its conversation.</small></span></div></div></section>
+        <section className="settings-card privacy-card"><div className="settings-section-heading"><div className="settings-icon"><ShieldCheck size={18} /></div><div><h2>Your privacy</h2><p>Your data stays in this browser.</p></div></div><div className="privacy-points"><div><LockKeyhole size={15} /><span><strong>History is stored on this device</strong><small>It is not synced to an account or saved on the ReplyMind server.</small></span></div><div><FileImage size={15} /><span><strong>Images are sent only when you request analysis</strong><small>Groq processes the screenshot; saved copies stay in this browser.</small></span></div></div><Button variant="danger" onClick={clearData} disabled={isUpdating}>{clearLocalData.isPending ? 'Clearing this browser…' : 'Delete all local ReplyMind data'}</Button></section>
       </div>
       <aside className="settings-aside">
-        <section className="usage-card"><span className="eyebrow-small">YOUR MONTHLY RHYTHM</span><h2>{usage.data?.plan || 'Your plan'}</h2>{usage.isLoading ? <div className="usage-skeleton" /> : usage.isError ? <StatusNote error>Usage isn’t available right now.</StatusNote> : usage.data && <><p className="usage-month">{usage.data.month}</p><div className="usage-meter"><div className="usage-label"><span>Conversation reads</span><b>{usage.data.generations} / {usage.data.generationLimit}</b></div><div className="meter-track"><i style={{ width: `${usage.data.generationLimit ? Math.min(100, usage.data.generations / usage.data.generationLimit * 100) : 0}%` }} /></div></div><div className="usage-meter"><div className="usage-label"><span>Image analyses</span><b>{usage.data.imageAnalyses} / {usage.data.imageAnalysisLimit}</b></div><div className="meter-track coral-meter"><i style={{ width: `${usage.data.imageAnalysisLimit ? Math.min(100, usage.data.imageAnalyses / usage.data.imageAnalysisLimit * 100) : 0}%` }} /></div></div><div className="storage-used"><span>Screenshot storage</span><strong>{(usage.data.storageBytes / (1024 * 1024)).toFixed(1)} MB</strong></div></>}</section>
+        <section className="usage-card"><span className="eyebrow-small">YOUR MONTHLY RHYTHM</span><h2>This browser</h2>{usage.isLoading ? <div className="usage-skeleton" /> : usage.isError ? <StatusNote error>Usage isn’t available right now.</StatusNote> : usage.data && <><p className="usage-month">{usage.data.month} · counts stay on this device</p><div className="usage-meter"><div className="usage-label"><span>Conversation reads</span><b>{usage.data.generations} / {usage.data.generationLimit}</b></div><div className="meter-track"><i style={{ width: `${usage.data.generationLimit ? Math.min(100, usage.data.generations / usage.data.generationLimit * 100) : 0}%` }} /></div></div><div className="usage-meter"><div className="usage-label"><span>Image analyses</span><b>{usage.data.imageAnalyses} / {usage.data.imageAnalysisLimit}</b></div><div className="meter-track coral-meter"><i style={{ width: `${usage.data.imageAnalysisLimit ? Math.min(100, usage.data.imageAnalyses / usage.data.imageAnalysisLimit * 100) : 0}%` }} /></div></div><div className="storage-used"><span>Screenshots on this device</span><strong>{(usage.data.storageBytes / (1024 * 1024)).toFixed(1)} / {(usage.data.storageLimitBytes / (1024 * 1024)).toFixed(0)} MB</strong></div><p className="usage-month">Local limits can be reset by clearing browser data.</p></>}</section>
         <section className="settings-card saved-controls"><div className="settings-section-heading"><div className="settings-icon"><Archive size={17} /></div><div><h2>Saved conversations</h2><p>Archive or remove a conversation.</p></div></div>
           {conversations.isLoading ? <div className="saved-skeleton"><div /><div /></div> : conversations.isError ? <StatusNote error>Couldn’t load saved conversations. <button className="inline-action" onClick={() => conversations.refetch()}>Retry</button></StatusNote> : conversations.data?.length ? <div className="saved-list">{conversations.data.map((item) => <div className="saved-row" key={item.id}><Link href={`/conversation/${item.id}`} className="saved-row-title"><strong>{item.title || 'Untitled conversation'}</strong><small>{item.isArchived ? 'Archived' : 'Active'}</small></Link><button className="saved-control" onClick={() => archive(item.id, item.isArchived)} aria-label={item.isArchived ? `Unarchive ${item.title}` : `Archive ${item.title}`} disabled={isUpdating}><Archive size={14} /></button><button className="saved-control saved-delete" onClick={() => remove(item.id)} aria-label={`Delete ${item.title}`} disabled={isUpdating}><Trash2 size={14} /></button></div>)}</div> : <div className="settings-empty">Your saved conversations will appear here.</div>}
         </section>
@@ -556,36 +556,14 @@ function SettingsPage() {
   </AppShell>;
 }
 
-function AuthUnavailable() {
-  return <main className="loading-screen"><Logo /><StatusNote error>Authentication is not configured. Please check back shortly.</StatusNote></main>;
-}
-
 function AppRoutes() {
   return <Switch>
       <Route path="/" component={Landing} />
-      <Route path="/sign-in" component={() => <AuthPage kind="sign-in" />} />
-      <Route path="/sign-in/:rest*" component={() => <AuthPage kind="sign-in" />} />
-      <Route path="/sign-up" component={() => <AuthPage kind="sign-up" />} />
-      <Route path="/sign-up/:rest*" component={() => <AuthPage kind="sign-up" />} />
-      <Route path="/app" component={() => publishableKey ? <RequireAuth><Dashboard /></RequireAuth> : <AuthUnavailable />} />
-      <Route path="/settings" component={() => publishableKey ? <RequireAuth><SettingsPage /></RequireAuth> : <AuthUnavailable />} />
-      <Route path="/conversation/:id" component={({ params }) => publishableKey ? <RequireAuth><ConversationPage id={params.id} /></RequireAuth> : <AuthUnavailable />} />
+      <Route path="/app" component={Dashboard} />
+      <Route path="/settings" component={SettingsPage} />
+      <Route path="/conversation/:id" component={({ params }) => <ConversationPage id={params.id} />} />
       <Route component={NotFound} />
   </Switch>;
-}
-
-function AuthenticatedRoutes() {
-  const [, setLocation] = useLocation();
-  return <ClerkProvider
-    publishableKey={publishableKey}
-    proxyUrl={clerkProxyUrl}
-    signInUrl={fullPath('sign-in')}
-    signUpUrl={fullPath('sign-up')}
-    routerPush={(path) => setLocation(stripBase(path))}
-    routerReplace={(path) => setLocation(stripBase(path))}
-  >
-    <AppRoutes />
-  </ClerkProvider>;
 }
 
 function App() {
@@ -596,7 +574,7 @@ function App() {
   }, []);
   return <QueryClientProvider client={queryClient}>
     <Router base={basePath}>
-      <AuthenticatedRoutes />
+      <AppRoutes />
     </Router>
   </QueryClientProvider>;
 }

@@ -5,12 +5,7 @@
  * Stateless AI analysis API. Conversation history and preferences stay in the user's browser.
  * OpenAPI spec version: 1.0.0
  */
-import type { ReplyTone } from './replyTone';
 
-export interface ReplySuggestion {
-  id: string;
-  tone: ReplyTone;
-  /** @maxLength 1000 */
-  text: string;
-  createdAt: Date;
+export interface ApiError {
+  error: string;
 }

@@ -1,13 +1,5 @@
 import express, { type Express } from "express";
-import cors from "cors";
 import pinoHttp from "pino-http";
-import { clerkMiddleware } from "@clerk/express";
-import { publishableKeyFromHost } from "@clerk/shared/keys";
-import {
-  CLERK_PROXY_PATH,
-  clerkProxyMiddleware,
-  getClerkProxyHost,
-} from "./middlewares/clerkProxyMiddleware";
 import router from "./routes";
 import { logger } from "./lib/logger";
 
@@ -33,20 +25,21 @@ app.use(
   }),
 );
 
-app.use(CLERK_PROXY_PATH, clerkProxyMiddleware());
-app.use(cors({ credentials: true, origin: true }));
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
-
-app.use(
-  clerkMiddleware((req) => ({
-    publishableKey: publishableKeyFromHost(
-      getClerkProxyHost(req) ?? "",
-      process.env.CLERK_PUBLISHABLE_KEY,
-    ),
-  })),
-);
+app.set("trust proxy", 1);
+app.use(express.json({ limit: "18mb" }));
 
 app.use("/api", router);
+app.use((error: { type?: string; status?: number }, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  if (error.type === "entity.too.large") {
+    res.status(413).json({ error: "The request is too large. Keep screenshots under 10 MB." });
+    return;
+  }
+  if (error.status === 400) {
+    res.status(400).json({ error: "The request body must be valid JSON." });
+    return;
+  }
+  logger.error({ status: error.status }, "API request failed");
+  res.status(500).json({ error: "ReplyMind could not complete this request." });
+});
 
 export default app;

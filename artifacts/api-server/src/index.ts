@@ -1,8 +1,5 @@
 import app from "./app";
 import { logger } from "./lib/logger";
-import { startPendingUploadCleanup } from "./lib/uploads";
-
-startPendingUploadCleanup();
 
 const rawPort = process.env["PORT"];
 
