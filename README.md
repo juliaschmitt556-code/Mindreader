@@ -1,33 +1,146 @@
-# ReplyMind
+# Mindreader
 
-ReplyMind is a mobile-first, installable web app for understanding a conversation and drafting a reply in your own voice.
+A TypeScript-powered reasoning and research engine for intelligent code analysis.
 
-## What it does
+## Features
 
-- Analyze pasted conversation text, a single latest message, or a screenshot.
-- Summarize tone and likely context, offer reply options, and rewrite an option on request.
-- Save conversations, preferences, and usage counts in the current browser.
-- Let the user optionally keep an analyzed screenshot in that browser.
+- **🧠 Code Reasoning**: Analyze code changes and provide intelligent insights
+- **🔍 Research**: Conduct research on specific topics and synthesize information
+- **📋 PR Review**: Automated comprehensive code reviews on pull requests
+- **⚡ CLI Tool**: Fast, local command-line interface for analysis
+- **🤖 GitHub Action**: Automatic analysis on PR events
 
-There is no sign-in, account, cloud conversation history, or cross-device sync. Local records can be removed in **Settings → Delete all local ReplyMind data**. Clearing browser data also removes them.
+## Quick Start
 
-## Privacy and AI
+### Prerequisites
 
-Conversation text and screenshots are sent for AI processing only after the user requests analysis. The API forwards the request to Groq but does not store conversation or screenshot content. Screenshots are retained in browser storage only when the user turns on **Keep this screenshot**. Analysis and reply rewriting require an internet connection; the cached PWA shell can load offline.
+- Node.js 20+
+- pnpm
+- Groq API key (get one at [groq.com](https://groq.com))
 
-The browser keeps provisional convenience limits of 100 conversation generations and 30 image analyses per calendar month, plus up to 100 MB of opt-in screenshot storage. These counts are local to the browser and reset if its site data is cleared. They are not secure, account-wide quotas.
+### Installation
 
-## Run in Replit
-
-The project has managed workflows for the web app and API server. Configure `GROQ_API_KEY` in Replit Secrets to enable analysis and rewrites; do not add it to frontend code or commit it.
-
-Useful commands:
-
-```sh
+```bash
 pnpm install
-pnpm run typecheck
-PORT=23669 BASE_PATH=/ pnpm run build
-pnpm --filter @workspace/api-spec run codegen
 ```
 
-The API is exposed on the same origin under `/api`. Its OpenAPI contract is maintained in `lib/api-spec/openapi.yaml`.
+### Configuration
+
+Create a `.env` file in the project root:
+
+```bash
+cp .env.example .env
+# Edit .env and add your GROQ_API_KEY
+```
+
+## CLI Usage
+
+### Analyze Code
+
+```bash
+pnpm -C scripts run mindreader:reason -- --files "src/index.ts" "src/utils.ts"
+```
+
+### Conduct Research
+
+```bash
+pnpm -C scripts run mindreader:research -- --query "How does authentication work in this codebase?"
+```
+
+### Review a PR
+
+```bash
+pnpm -C scripts run mindreader:review -- --pr-number 42 --repo owner/repo
+```
+
+### See All Options
+
+```bash
+pnpm -C scripts run mindreader -- --help
+pnpm -C scripts run mindreader reason -- --help
+pnpm -C scripts run mindreader research -- --help
+pnpm -C scripts run mindreader review -- --help
+```
+
+## GitHub Action
+
+The GitHub Action automatically runs on:
+
+- Pull request creation/updates
+- Manual workflow dispatch
+
+### Setup
+
+1. Add your Groq API key as a GitHub secret:
+   - Go to **Settings** → **Secrets and variables** → **Actions**
+   - Create `GROQ_API_KEY`
+
+2. The action will automatically analyze PRs and post comments
+
+### Manual Trigger
+
+Go to **Actions** → **Reasoning & Research Analysis** → **Run workflow** and specify:
+- Query or analysis mode
+- PR number (if applicable)
+
+## Project Structure
+
+```
+├── .github/workflows/reasoning-research.yml  # GitHub Action
+├── scripts/
+│   ├── src/
+│   │   ├── mindreader.ts                     # CLI entry point
+│   │   ├── reasoning/
+│   │   │   └── engine.ts                     # Reasoning logic
+│   │   └── research/
+│   │       └── engine.ts                     # Research logic
+│   └── package.json
+├── .env.example                               # Environment template
+└── README.md
+```
+
+## Architecture
+
+- **ReasoningEngine**: Uses Groq's Mixtral model for code analysis
+- **ResearchEngine**: Conducts structured research and synthesizes findings
+- **CLI**: Commander.js-based command-line interface
+- **GitHub Action**: Integrates with GitHub's native CI/CD
+
+## API Keys
+
+### Groq API
+
+Get a free API key at [console.groq.com](https://console.groq.com)
+
+Models available:
+- `mixtral-8x7b-32768` (fast, powerful)
+- `llama2-70b-4096`
+- `gemma-7b-it`
+
+## Development
+
+### Build
+
+```bash
+pnpm run build
+```
+
+### Type Check
+
+```bash
+pnpm run typecheck
+```
+
+### Local Testing
+
+```bash
+# Test reasoning
+pnpm -C scripts run mindreader:reason -- --files "package.json"
+
+# Test research
+pnpm -C scripts run mindreader:research -- --query "What is this project about?"
+```
+
+## License
+
+MIT

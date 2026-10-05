@@ -5,10 +5,17 @@
   "type": "module",
   "scripts": {
     "hello": "tsx ./src/hello.ts",
+    "mindreader:reason": "tsx ./src/mindreader.ts reason",
+    "mindreader:research": "tsx ./src/mindreader.ts research",
+    "mindreader:review": "tsx ./src/mindreader.ts review",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "devDependencies": {
     "@types/node": "catalog:",
+    "commander": "^12.0.0",
     "tsx": "catalog:"
+  },
+  "dependencies": {
+    "groq-sdk": "^1.6.0"
   }
 }

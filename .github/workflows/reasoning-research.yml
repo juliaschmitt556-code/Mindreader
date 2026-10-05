@@ -1,0 +1,79 @@
+name: Reasoning & Research Analysis
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+    inputs:
+      query:
+        description: 'Research query to run'
+        required: false
+        type: string
+      mode:
+        description: 'Analysis mode (research, reason, or review)'
+        required: false
+        type: choice
+        options:
+          - research
+          - reason
+          - review
+        default: review
+
+env:
+  GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      contents: read
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: latest
+      
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      
+      - name: Run PR Review (Reasoning)
+        if: github.event_name == 'pull_request'
+        run: pnpm -C scripts run mindreader:reason -- --pr-number="${{ github.event.pull_request.number }}" --repo="${{ github.repository }}"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Run Custom Research Query
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'research'
+        run: pnpm -C scripts run mindreader:research -- --query="${{ github.event.inputs.query }}" --repo="${{ github.repository }}"
+      
+      - name: Run Code Reasoning
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'reason'
+        run: pnpm -C scripts run mindreader:reason -- --repo="${{ github.repository }}"
+      
+      - name: Comment on PR
+        if: always() && github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            if (fs.existsSync('analysis-output.md')) {
+              const output = fs.readFileSync('analysis-output.md', 'utf8');
+              github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: output
+              });
+            }
